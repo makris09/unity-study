@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Unity Transform 3D Visualizer (Mobile Ready)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --panel-bg: #2d2d2d;
+            --text-color: #eeeeee;
+            --primary: #4CAF50;
+            --input-color: #00bcd4;
+            --output-color: #ff9800;
+        }
+        /* body 높이를 스마트폰 화면에 딱 맞게(100dvh) 설정 */
+        body { 
+            margin: 0; padding: 0; overflow: hidden; 
+            font-family: 'Segoe UI', sans-serif; 
+            background: var(--bg-color); color: var(--text-color); 
+            display: flex; flex-direction: row; 
+            height: 100vh; height: 100dvh; 
+        }
+        
+        /* 터치 시 화면 새로고침(Pull-to-refresh) 방지 */
+        #canvas-container { 
+            flex: 1; position: relative; background-color: #111; 
+            touch-action: none; 
+        }
+        
+        /* 3D 뷰포트 내 UI 오버레이 */
+        #result-overlay {
+            position: absolute; top: 15px; left: 15px; background: rgba(0,0,0,0.7);
+            padding: 12px; border-radius: 8px; border-left: 5px solid var(--output-color);
+            pointer-events: none; text-shadow: 1px 1px 2px black; z-index: 10;
+        }
+        #result-overlay h3 { margin: 0 0 5px 0; color: white; font-size: 16px; }
+        #result-overlay p { margin: 0; font-size: 15px; font-weight: bold; color: var(--output-color); }
+        
+        .help-text { 
+            position: absolute; bottom: 15px; left: 15px; background: rgba(0,0,0,0.6); 
+            padding: 8px 12px; border-radius: 5px; font-size: 12px; pointer-events: none; color: #ddd; z-index: 10;
+        }
+
+        /* 컨트롤 패널 */
+        .controls { 
+            width: 380px; background: var(--panel-bg); padding: 15px; 
+            overflow-y: auto; border-left: 1px solid #444; box-sizing: border-box; 
+        }
+        h2 { margin: 0 0 10px 0; font-size: 18px; color: var(--primary); }
+        h3 { margin: 15px 0 10px 0; font-size: 15px; border-bottom: 1px solid #555; padding-bottom: 5px; color: #ddd; }
+        
+        select { width: 100%; padding: 10px; background: #111; color: white; border: 1px solid #555; border-radius: 6px; font-size: 15px; margin-bottom: 10px; outline: none; }
+        
+        .explanation { background: #1a1a1a; padding: 10px; border-radius: 6px; border-left: 4px solid var(--primary); font-size: 13px; line-height: 1.4; margin-bottom: 10px; word-break: keep-all; }
+        
+        .xyz-group { background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px; margin-bottom: 10px; border: 1px solid #333; }
+        .slider-row { display: flex; align-items: center; margin-bottom: 8px; font-size: 14px; }
+        .slider-row:last-child { margin-bottom: 0; }
+        .slider-row label { width: 20px; font-weight: bold; text-align: center; }
+        .slider-row .lbl-x { color: #ff5555; }
+        .slider-row .lbl-y { color: #55ff55; }
+        .slider-row .lbl-z { color: #5555ff; }
+        .slider-row input[type="range"] { flex: 1; margin: 0 10px; cursor: pointer; height: 20px; }
+        .slider-row input[type="number"] { width: 45px; background: #111; color: white; border: 1px solid #555; padding: 4px; border-radius: 4px; text-align: center; font-size: 13px; flex-shrink: 0; }
+        
+        .legend span { display: inline-block; padding: 3px 6px; border-radius: 4px; margin-right: 4px; margin-bottom: 5px; font-weight: bold; font-size: 11px;}
+        .leg-obj { background: #EEDB00; color: black; }
+        .leg-in { background: var(--input-color); color: black; }
+        .leg-out { background: var(--output-color); color: black; }
+        .top-action-row { display: flex; gap: 10px; margin-bottom: 10px; }
+        .reset-btn { 
+            background: #f44336; color: white; border: none; padding: 0 15px; 
+            border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px;
+            transition: background 0.2s; white-space: nowrap;
+        }
+        .reset-btn:hover { background: #d32f2f; }
+        
+        .dir-badge { 
+            display: inline-block; padding: 5px 10px; border-radius: 4px; 
+            font-size: 13px; font-weight: bold; margin-bottom: 12px;
+            border: 1px solid var(--primary); color: var(--primary); background: rgba(76, 175, 80, 0.1);
+        }
+        .dir-badge.inverse { 
+            border-color: #ff9800; color: #ff9800; background: rgba(255, 152, 0, 0.1);
+        }
+        /* 모바일 대응 (화면 폭이 768px 이하일 때) */
+        @media (max-width: 768px) {
+            body { flex-direction: column; } /* 상하 배치로 변경 */
+            #canvas-container { 
+                flex: none; 
+                height: 40vh; /* 화면 상단 40%를 3D 화면으로 사용 */
+                width: 100%; 
+            }
+            .controls { 
+                width: 100%; 
+                flex: 1; /* 나머지 하단 공간을 패널로 사용 */
+                border-left: none; 
+                border-top: 1px solid #444; 
+                padding-bottom: 30px; /* 스크롤 여백 */
+            }
+            .help-text { font-size: 10px; padding: 6px; bottom: 10px; left: 10px; }
+            #result-overlay { top: 10px; left: 10px; padding: 8px; }
+            #result-overlay h3 { font-size: 14px; }
+            #result-overlay p { font-size: 13px; }
+            
+            /* 모바일에서 슬라이더 터치 영역 확대 */
+            .slider-row input[type="range"] { height: 24px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container">
+        <div id="result-overlay">
+            <h3 id="func-title">TransformPoint</h3>
+            <p id="out-text">X: 0.000, Y: 0.000, Z: 0.000</p>
+        </div>
+        <div class="help-text">
+            📱 <b>1손가락:</b> 시점 회전 | <b>2손가락:</b> 이동 및 줌인/아웃<br>
+            🔴 X축(Right) 🟢 Y축(Up) 🔵 Z축(Forward)
+        </div>
+    </div>
+
+    <div class="controls">
+    <h2>🧊 Unity Transform 복습</h2>
+        
+        <div class="top-action-row">
+            <select id="funcSelect" style="margin-bottom: 0;">
+                <option value="TransformPoint">TransformPoint (위치 변환)</option>
+                <option value="TransformDirection">TransformDirection (방향 변환)</option>
+                <option value="TransformVector">TransformVector (벡터 변환)</option>
+                <option value="InverseTransformPoint">InverseTransformPoint (위치 역변환)</option>
+                <option value="InverseTransformDirection">InverseTransformDirection (방향 역변환)</option>
+                <option value="InverseTransformVector">InverseTransformVector (벡터 역변환)</option>
+            </select>
+            <button id="resetBtn" class="reset-btn">🔄 리셋</button>
+        </div>
+
+        <div class="explanation" id="expBox"></div>
+
+        <div class="legend">
+            <span class="leg-obj">대상 오브젝트</span>
+            <span class="leg-in">입력 (Input)</span>
+            <span class="leg-out">결과 (Output)</span>
+        </div>
+
+        <h3>📦 대상 오브젝트 (기준점)</h3>
+        <div id="dirBadge" class="dir-badge">Local ➔ World (정방향 변환)</div>
+        
+        <div class="xyz-group">
+            <div style="font-size:12px; margin-bottom:5px; color:#aaa;">Position (위치)</div>
+            <div class="slider-row"><label class="lbl-x">X</label><input type="range" id="px" min="-5" max="5" step="0.5" value="2"><input type="number" id="n_px" value="2" readonly></div>
+            <div class="slider-row"><label class="lbl-y">Y</label><input type="range" id="py" min="-5" max="5" step="0.5" value="1"><input type="number" id="n_py" value="1" readonly></div>
+            <div class="slider-row"><label class="lbl-z">Z</label><input type="range" id="pz" min="-5" max="5" step="0.5" value="0"><input type="number" id="n_pz" value="0" readonly></div>
+        </div>
+
+        <div class="xyz-group">
+            <div style="font-size:12px; margin-bottom:5px; color:#aaa;">Rotation (회전)</div>
+            <div class="slider-row"><label class="lbl-x">X</label><input type="range" id="rx" min="-180" max="180" step="15" value="0"><input type="number" id="n_rx" value="0" readonly></div>
+            <div class="slider-row"><label class="lbl-y">Y</label><input type="range" id="ry" min="-180" max="180" step="15" value="45"><input type="number" id="n_ry" value="45" readonly></div>
+            <div class="slider-row"><label class="lbl-z">Z</label><input type="range" id="rz" min="-180" max="180" step="15" value="0"><input type="number" id="n_rz" value="0" readonly></div>
+        </div>
+
+        <div class="xyz-group">
+            <div style="font-size:12px; margin-bottom:5px; color:#aaa;">Scale (크기)</div>
+            <div class="slider-row"><label class="lbl-x">X</label><input type="range" id="sx" min="0.5" max="3" step="0.1" value="1"><input type="number" id="n_sx" value="1" readonly></div>
+            <div class="slider-row"><label class="lbl-y">Y</label><input type="range" id="sy" min="0.5" max="3" step="0.1" value="2"><input type="number" id="n_sy" value="2" readonly></div>
+            <div class="slider-row"><label class="lbl-z">Z</label><input type="range" id="sz" min="0.5" max="3" step="0.1" value="1"><input type="number" id="n_sz" value="1" readonly></div>
+        </div>
+
+        <h3 id="input-title">✏️ 입력 (Local Space)</h3>
+        <div class="xyz-group">
+            <div class="slider-row"><label class="lbl-x">X</label><input type="range" id="ix" min="-5" max="5" step="0.5" value="2"><input type="number" id="n_ix" value="2" readonly></div>
+            <div class="slider-row"><label class="lbl-y">Y</label><input type="range" id="iy" min="-5" max="5" step="0.5" value="0"><input type="number" id="n_iy" value="0" readonly></div>
+            <div class="slider-row"><label class="lbl-z">Z</label><input type="range" id="iz" min="-5" max="5" step="0.5" value="0"><input type="number" id="n_iz" value="0" readonly></div>
+        </div>
+    </div>
+
+<script>
+    const controlsList =['px','py','pz','rx','ry','rz','sx','sy','sz','ix','iy','iz'];
+    const vals = {};
+    const funcSelect = document.getElementById('funcSelect');
+    const expBox = document.getElementById('expBox');
+    const inputTitle = document.getElementById('input-title');
+    const dirBadge = document.getElementById('dirBadge'); // 뱃지 요소 가져오기
+    const descriptions = {
+        TransformPoint: "<b>Local ➔ World (위치 변환)</b><br>오브젝트의 <b>[위치, 회전, 크기]</b> 모두 적용. 캐릭터의 '오른손에 쥔 칼의 월드 좌표'를 구할 때 사용.",
+        TransformDirection: "<b>Local ➔ World (방향 변환)</b><br>오브젝트의 <b>[회전]</b>만 적용. (위치/크기 무시). 캐릭터가 바라보는 '앞쪽(Forward)'을 월드 기준으로 구할 때 사용.",
+        TransformVector:"<b>Local ➔ World (벡터 변환)</b><br>오브젝트의 <b>[회전, 크기]</b> 적용 (위치 무시).<br>단순한 방향뿐만 아니라, 내 오브젝트의 <b>스케일(크기)까지 비례해서 늘어나거나 줄어든 방향 벡터</b>를 월드 기준으로 구할 때 사용합니다.",
+        InverseTransformPoint: "<b>World ➔ Local (위치 역변환)</b><br>월드의 특정 점이 <b>내 캐릭터 기준(Local)</b>으로 어디인지 구함. (예: 적이 내 뒤에 있는지 판별)",
+        InverseTransformDirection: "<b>World ➔ Local (방향 역변환)</b><br>월드 기준의 방향이 내 캐릭터 시점에서는 어느 방향으로 향하는지를 구함.",
+        InverseTransformVector: "<b>World ➔ Local (벡터 역변환)</b><br>월드 공간의 벡터를 내 캐릭터 시점(Local)으로 변환합니다. 이때 내 캐릭터의 <b>스케일(크기) 비율까지 역으로 계산</b>하여 적용합니다.",
+    };
+
+    function syncUI() {
+        controlsList.forEach(id => {
+            const el = document.getElementById(id);
+            vals[id] = parseFloat(el.value);
+            document.getElementById('n_' + id).value = el.value;
+        });
+        
+        const func = funcSelect.value;
+        const isInverse = func.includes('Inverse');
+        
+        document.getElementById('func-title').innerText = func;
+        expBox.innerHTML = descriptions[func];
+        
+        // 역변환 여부에 따라 뱃지와 입력 라벨 동적 변경
+        if (isInverse) {
+            dirBadge.innerText = 'World ➔ Local (역방향 변환)';
+            dirBadge.className = 'dir-badge inverse';
+            inputTitle.innerText = '🎯 목표물(Target)의 세상 좌표 (World Input)';
+        } else {
+            dirBadge.innerText = 'Local ➔ World (정방향 변환)';
+            dirBadge.className = 'dir-badge';
+            inputTitle.innerText = '📏 내 기준에서 떨어진 위치/방향 (Local Input)';
+        }
+    }
+
+        // 초기화(리셋) 기능 추가
+        document.getElementById('resetBtn').addEventListener('click', () => {
+        const defaults = { px:0, py:0, pz:0, rx:0, ry:0, rz:0, sx:1, sy:1, sz:1, ix:0, iy:0, iz:0 };
+        controlsList.forEach(id => {
+            document.getElementById(id).value = defaults[id];
+        });
+        syncUI();
+        updateMath();
+
+    });
+
+    controlsList.forEach(id => document.getElementById(id).addEventListener('input', () => { syncUI(); updateMath(); }));
+    funcSelect.addEventListener('change', () => { syncUI(); updateMath(); });
+
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    
+    // 🔥 핵심 1: Scene 전체의 Z축을 뒤집어 유니티(왼손 좌표계)와 동일한 시각적 환경을 만듭니다.
+    scene.scale.set(1, 1, -1);
+    
+    const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 100);
+    camera.position.set(8, 6, 8);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    scene.add(new THREE.AmbientLight(0x404040, 2));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+    dirLight.position.set(5, 10, 5);
+    scene.add(dirLight);
+
+    scene.add(new THREE.GridHelper(20, 20, 0x444444, 0x222222));
+    scene.add(new THREE.AxesHelper(5));
+
+    window.addEventListener('resize', () => {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+
+    // 🔥 핵심 2: Z축이 반전되면 면의 렌더링 방향이 뒤집히므로 모든 재질에 'side: THREE.DoubleSide'를 추가합니다.
+    const unityObj = new THREE.Group();
+    unityObj.rotation.order = 'YXZ'; 
+    scene.add(unityObj);
+
+    const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+    const boxMat = new THREE.MeshPhongMaterial({ color: 0xEEDB00, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+    const boxMesh = new THREE.Mesh(boxGeo, boxMat);
+    unityObj.add(boxMesh);
+
+    const localAxes = new THREE.AxesHelper(2);
+    unityObj.add(localAxes);
+
+    const matInput = new THREE.MeshBasicMaterial({ color: 0x00bcd4, side: THREE.DoubleSide });
+    const matOutput = new THREE.MeshBasicMaterial({ color: 0xff9800, side: THREE.DoubleSide });
+
+    const sphereInput = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 16), matInput);
+    const sphereOutput = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 16), matOutput);
+    scene.add(sphereInput);
+    scene.add(sphereOutput);
+
+    const arrowInput = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 1, 0x00bcd4, 0.4, 0.2);
+    const arrowOutput = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 1, 0xff9800, 0.5, 0.25);
+    
+    // Point 변환 시 관계를 보여줄 점선 가이드라인 추가
+    const lineMat = new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.2, gapSize: 0.1, transparent: true, opacity: 0.5 });
+    const lineGeo = new THREE.BufferGeometry();
+    const connectionLine = new THREE.Line(lineGeo, lineMat);
+    scene.add(connectionLine);
+
+    arrowInput.cone.material.side = THREE.DoubleSide;
+    arrowOutput.cone.material.side = THREE.DoubleSide;
+    scene.add(arrowInput);
+    scene.add(arrowOutput);
+
+    // 🔥 핵심 3: 눈에 보이는 세상은 뒤집었지만, "수학 계산"은 꼬이지 않게 독립된 투명 객체(mathObj)에서 진행합니다.
+    const mathObj = new THREE.Object3D();
+    mathObj.rotation.order = 'YXZ';
+
+    function setArrow(arrow, startPoint, dirVector) {
+        const length = dirVector.length();
+        if(length < 0.001) { arrow.visible = false; } else {
+            arrow.visible = true;
+            arrow.position.copy(startPoint);
+            arrow.setDirection(dirVector.clone().normalize());
+            arrow.setLength(length, Math.min(0.3 * length, 0.5), Math.min(0.15 * length, 0.2));
+        }
+    }
+
+    // 부동소수점 오차로 인한 -0.000 표기 방지 헬퍼 함수
+    function cleanZero(val) {
+        return Math.abs(val) < 0.001 ? 0 : val;
+    }
+
+    function updateMath() {
+        const func = funcSelect.value;
+        const isPoint = func.includes('Point');
+        const isInverse = func.includes('Inverse');
+
+        mathObj.position.set(vals.px, vals.py, vals.pz);
+        mathObj.rotation.set(THREE.MathUtils.degToRad(vals.rx), THREE.MathUtils.degToRad(vals.ry), THREE.MathUtils.degToRad(vals.rz));
+        mathObj.scale.set(vals.sx, vals.sy, vals.sz);
+        mathObj.updateMatrixWorld(true);
+
+        unityObj.position.copy(mathObj.position);
+        unityObj.rotation.copy(mathObj.rotation);
+        unityObj.scale.copy(mathObj.scale);
+
+        localAxes.scale.set(1/vals.sx, 1/vals.sy, 1/vals.sz);
+
+        let inputVec = new THREE.Vector3(vals.ix, vals.iy, vals.iz);
+        let outputVec = new THREE.Vector3();
+
+        switch(func) {
+            case 'TransformPoint':
+                outputVec.copy(inputVec).applyMatrix4(mathObj.matrixWorld);
+                break;
+            case 'TransformDirection':
+                let rotMatDir = new THREE.Matrix4().extractRotation(mathObj.matrixWorld);
+                outputVec.copy(inputVec).applyMatrix4(rotMatDir);
+                break;
+            case 'TransformVector':
+                let matVec = mathObj.matrixWorld.clone();
+                matVec.setPosition(0, 0, 0); 
+                outputVec.copy(inputVec).applyMatrix4(matVec);
+                break;
+            case 'InverseTransformPoint':
+                outputVec = mathObj.worldToLocal(inputVec.clone());
+                break;
+            case 'InverseTransformDirection':
+                let rotMat = new THREE.Matrix4().extractRotation(mathObj.matrixWorld);
+                outputVec.copy(inputVec).applyMatrix4(rotMat.invert());
+                break;
+            case 'InverseTransformVector':
+                let matVecInv = mathObj.matrixWorld.clone();
+                matVecInv.setPosition(0, 0, 0);
+                outputVec.copy(inputVec).applyMatrix4(matVecInv.invert());
+                break;
+        }
+
+        sphereInput.visible = false; sphereOutput.visible = false;
+        arrowInput.visible = false; arrowOutput.visible = false;
+        connectionLine.visible = false;
+
+        if (isPoint) {
+            sphereInput.visible = true; sphereOutput.visible = true;
+            
+            // 🔥 수정 1: 실제 월드 공간상에 존재하는 '단 하나의 물리적 위치'를 구합니다.
+            // TransformPoint(Local->World)일 때는 결과값(outputVec)이 실제 위치이고,
+            // InverseTransformPoint(World->Local)일 때는 입력값(inputVec)이 실제 위치입니다.
+            const physicalWorldPos = isInverse ? inputVec.clone() : outputVec.clone();
+
+            // 두 공을 같은 위치에 둡니다. (sphereOutput이 조금 더 커서 테두리처럼 겹쳐 보입니다)
+            sphereInput.position.copy(physicalWorldPos); 
+            sphereOutput.position.copy(physicalWorldPos);
+            
+            // 점선은 항상 오브젝트에서 그 '물리적 위치'로 연결합니다.
+            connectionLine.geometry.setFromPoints([unityObj.position, physicalWorldPos]);
+            connectionLine.computeLineDistances();
+            connectionLine.visible = true;
+
+        } else {
+            // 🔥 수정 2: 방향/벡터 변환 시 (역변환 화살표 위치 수정)
+            // 정변환이든 역변환이든 '내 캐릭터 기준'으로 방향이 어떻게 꺾이는지 한눈에 
+            // 비교할 수 있도록 두 화살표 모두 캐릭터(unityObj) 위치에서 출발하게 만듭니다.
+            setArrow(arrowInput, unityObj.position, inputVec); 
+            setArrow(arrowOutput, unityObj.position, outputVec);
+        }
+
+        document.getElementById('out-text').innerHTML = 
+            `X: ${cleanZero(outputVec.x).toFixed(3)}<br>Y: ${cleanZero(outputVec.y).toFixed(3)}<br>Z: ${cleanZero(outputVec.z).toFixed(3)}`;
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+
+    syncUI();
+    updateMath();
+    animate();
+
+</script></body>
+</html>
