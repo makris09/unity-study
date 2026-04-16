@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D 퍼즐 플랫포머 프로젝트 멘토링 허브</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;700;800&display=swap');
+        body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; color: #1e293b; }
+        
+        .chart-container { 
+            position: relative; 
+            width: 100%; 
+            max-width: 600px; 
+            margin-left: auto; 
+            margin-right: auto; 
+            height: 350px; 
+            max-height: 400px; 
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        } 
+        @media (min-width: 768px) { .chart-container { height: 400px; max-width: 700px; } }
+
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .glass-card { background: rgba(255, 255, 255, 0.95); box-shadow: 0 4px 20px rgba(0,0,0,0.03); border: 1px solid rgba(226, 232, 240, 0.8); }
+        .nav-item { transition: all 0.2s ease; border-left: 4px solid transparent; }
+        .nav-active { background-color: #e0f2fe; color: #0284c7; border-left-color: #0284c7; font-weight: 700; }
+        .nav-item:hover:not(.nav-active) { background-color: #f1f5f9; }
+        
+        @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-content { animation: slideUp 0.4s ease-out forwards; }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+
+    <nav class="w-20 md:w-64 bg-white border-r border-slate-200 flex flex-col z-20 flex-shrink-0 shadow-sm">
+        <div class="p-4 md:p-6 border-b border-slate-100 flex justify-center md:justify-start items-center">
+            <span class="text-2xl mr-0 md:mr-2">📖</span>
+            <div class="hidden md:block">
+                <h1 class="text-lg font-extrabold text-slate-800 leading-tight">생존 가이드</h1>
+                <p class="text-xs text-slate-500 font-medium">AI PD의 밀착 멘토링</p>
+            </div>
+        </div>
+        <ul class="flex-col py-2 overflow-y-auto" id="nav-container"></ul>
+        <div class="mt-auto p-4 border-t border-slate-100 hidden md:block text-center bg-slate-50">
+            <span class="text-xs font-bold text-slate-500">Unity 2D 퍼즐 플랫포머</span>
+            <div class="text-[10px] text-slate-400 mt-1">국비지원 2달차 화이팅!</div>
+        </div>
+    </nav>
+
+    <main class="flex-1 overflow-y-auto bg-slate-50 relative" id="main-content"></main>
+
+    <script>
+        const appData = {
+            intro: {
+                id: 'intro', icon: '🏠', label: '프로젝트 개요',
+                title: '환영합니다. 완성이 최고의 기획입니다.',
+                desc: '학원 2달 차, 2주라는 짧은 기간 동안 여러분 팀이 무사히 "미완성 동화책" 데모 빌드를 완성하기 위한 현실적인 가이드입니다.',
+                render: () => `
+                    <div class="animate-content space-y-6">
+                        <div class="bg-gradient-to-r from-sky-500 to-indigo-500 text-white p-6 rounded-2xl shadow-md">
+                            <h3 class="text-xl font-bold mb-2 flex items-center"><span class="mr-2 text-2xl">💡</span> AI PD의 핵심 조언</h3>
+                            <p class="text-sky-50 leading-relaxed text-sm md:text-base">
+                                방대한 세계관이나 화려한 시스템을 기획하려 하지 마세요. 우리의 목표는 <strong>'배운 것을 증명하는 완벽한 1개의 스테이지(버티컬 슬라이스)'</strong>를 만드는 것입니다. 좌측 메뉴를 통해 기획부터 기술 검토까지 순서대로 확인하며 팀의 방향을 잡으세요.
+                            </p>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="glass-card p-5 rounded-xl flex flex-col justify-between cursor-pointer hover:-translate-y-1 transition-transform" onclick="navigateTo('story')">
+                                <div>
+                                    <div class="text-3xl mb-3">📚</div>
+                                    <h4 class="font-bold text-lg text-slate-800">기획 및 레퍼런스</h4>
+                                    <p class="text-sm text-slate-500 mt-2">동화책 컨셉 기획과 참고해야 할 레퍼런스 구분</p>
+                                </div>
+                                <div class="mt-4 text-sky-600 text-sm font-bold flex items-center">자세히 보기 <span class="ml-1">→</span></div>
+                            </div>
+                            <div class="glass-card p-5 rounded-xl flex flex-col justify-between cursor-pointer hover:-translate-y-1 transition-transform" onclick="navigateTo('rnr')">
+                                <div>
+                                    <div class="text-3xl mb-3">🤝</div>
+                                    <h4 class="font-bold text-lg text-slate-800">역할 분담 (R&R)</h4>
+                                    <p class="text-sm text-slate-500 mt-2">5명의 팀원이 병목 없이 효율적으로 일하는 분담표 및 차트</p>
+                                </div>
+                                <div class="mt-4 text-sky-600 text-sm font-bold flex items-center">자세히 보기 <span class="ml-1">→</span></div>
+                            </div>
+                            <div class="glass-card p-5 rounded-xl flex flex-col justify-between cursor-pointer hover:-translate-y-1 transition-transform" onclick="navigateTo('milestone')">
+                                <div>
+                                    <div class="text-3xl mb-3">⏳</div>
+                                    <h4 class="font-bold text-lg text-slate-800">주차별 마일스톤</h4>
+                                    <p class="text-sm text-slate-500 mt-2">알파, 베타 빌드의 개념과 주차별 반드시 끝내야 할 과제</p>
+                                </div>
+                                <div class="mt-4 text-sky-600 text-sm font-bold flex items-center">자세히 보기 <span class="ml-1">→</span></div>
+                            </div>
+                            <div class="glass-card p-5 rounded-xl flex flex-col justify-between cursor-pointer hover:-translate-y-1 transition-transform" onclick="navigateTo('git')">
+                                <div>
+                                    <div class="text-3xl mb-3">🚨</div>
+                                    <h4 class="font-bold text-lg text-slate-800">협업 및 위기 관리</h4>
+                                    <p class="text-sm text-slate-500 mt-2">국비학원 프로젝트 실패 1순위, Git 충돌을 막는 4계명</p>
+                                </div>
+                                <div class="mt-4 text-sky-600 text-sm font-bold flex items-center">자세히 보기 <span class="ml-1">→</span></div>
+                            </div>
+                        </div>
+                    </div>
+                `
+            },
+            story: {
+                id: 'story', icon: '📚', label: '스토리 & 레퍼런스',
+                title: '동화책 테마 기획 및 레퍼런스 분석',
+                desc: '초기 기획 아이디어를 구체화하고, "2D 퍼즐 플랫포머"라는 장르에 맞게 참고할 레퍼런스와 버릴 레퍼런스를 명확히 구분했습니다.',
+                render: () => `
+                    <div class="animate-content space-y-8">
+                        <div class="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
+                            <h3 class="text-lg font-bold text-violet-600 mb-4 flex items-center"><span class="mr-2">✨</span> 초기 기획안 제안: 기억을 잃어가는 일기장</h3>
+                            <p class="text-slate-700 leading-relaxed mb-4">
+                                "미완성 동화책" 뼈대를 유지하며 구현이 쉬운 기획입니다. 플레이어는 <strong>'잉크 요정'</strong>이 되어 먼지 쌓인 할머니의 일기장 속으로 들어갑니다. 스테이지 내에서 환경 퍼즐을 풀어 지워진 <strong>단어 조각</strong>을 수집하고, 마지막 페이지에 도달해 단어들을 조합해 문장을 완성하면 흑백의 배경이 컬러로 물들며 다음 챕터로 넘어갑니다.
+                            </p>
+                        </div>
+                        
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2">실전 레퍼런스 팩트 체크 (플랫포머 융합)</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div class="bg-emerald-50 rounded-xl p-6 border border-emerald-200 relative overflow-hidden">
+                                    <div class="absolute top-0 right-0 bg-emerald-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">적극 참고</div>
+                                    <h4 class="font-bold text-emerald-800 text-lg mb-3 flex items-center"><span class="text-2xl mr-2">✅</span> 벤치마킹 권장</h4>
+                                    <ul class="space-y-4">
+                                        <li>
+                                            <strong class="text-emerald-900 block mb-1">Typoman (타이포맨)</strong>
+                                            <p class="text-sm text-emerald-700">단어(알파벳)를 밀고 밟고 점프해서 길을 만드는 <strong>메인 플랫포밍 조작과 물리 기믹</strong>의 완벽한 롤모델입니다.</p>
+                                        </li>
+                                        <li>
+                                            <strong class="text-emerald-900 block mb-1">Storyteller (스토리텔러)</strong>
+                                            <p class="text-sm text-emerald-700">스테이지 클리어 직전, <strong>수집한 단어를 빈칸에 드래그 앤 드롭해 스토리를 완성하는 시스템</strong>만 쏙 빼옵니다.</p>
+                                        </li>
+                                        <li>
+                                            <strong class="text-emerald-900 block mb-1">The Pedestrian (더 페데스트리안)</strong>
+                                            <p class="text-sm text-emerald-700">2D 평면 종이 사이를 오가는 연출과 맵 레이아웃 구성을 참고하기 좋습니다.</p>
+                                        </li>
+                                    </ul>
+                                </div>
+
+                                <div class="bg-orange-50 rounded-xl p-6 border border-orange-200 relative overflow-hidden">
+                                    <div class="absolute top-0 right-0 bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">부분 참고</div>
+                                    <h4 class="font-bold text-orange-800 text-lg mb-3 flex items-center"><span class="text-2xl mr-2">⚠️</span> 부분적 벤치마킹</h4>
+                                    <ul class="space-y-4">
+                                        <li>
+                                            <strong class="text-orange-900 block mb-1">The Plucky Squire (플럭키 스콰이어)</strong>
+                                            <p class="text-sm text-orange-700">책 속 배경의 단어를 플레이어가 타격하여 빼내고, 다른 곳에서 얻은 단어를 끼워 넣으면 실제 게임 맵의 문이 열리는 창의적인 기믹이 '동화책을 완성한다'는 기획에 부합합니다. 단 2D 책 속과 3D 현실을 넘나드는 기술은 2주 프로젝트에선 절대 구현 불가합니다. 책 내부의 뛰어난 2D 아트 스타일과 퍼즐 아이디어만 부분적으로 참고하세요.</p>
+                                        </li>
+                                        <li>
+                                            <strong class="text-orange-900 block mb-1">Inside, Planet of Lana, Hoa</strong>
+                                            <p class="text-sm text-orange-700">이 게임들은 고도로 계산된 '물리 연출'과 '수작업 애니메이션'이 핵심입니다. 따라 하려다 일정이 붕괴되니 특유의 감성만 참고하세요.</p>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `
+            },
+            rnr: {
+                id: 'rnr', icon: '🤝', label: '현실적인 R&R',
+                title: '전공(2)·비전공(3) 맞춤형 황금 분담표',
+                desc: '문서만 쓰는 "기획 전담"은 없앴습니다. 5명 모두가 유니티 엔진을 만지며 각자의 특기에 맞게 포트폴리오를 챙겨가는 완벽한 R&R 구조입니다.',
+                render: () => `
+                    <div class="animate-content">
+                        <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-8">
+                            
+                            <h3 class="text-center font-bold text-slate-700 mb-4">팀원 5인 동등한 업무 비중 (각 20%)</h3>
+                            <div class="chart-container">
+                                <canvas id="rnrChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- 전공자 역할 (하드코어 로직) -->
+                        <h3 class="text-lg font-bold text-slate-800 mb-4 mt-8 flex items-center">💻 전공자 추천 (핵심 로직 구현)</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                            <div class="glass-card p-5 border-l-4 border-l-violet-500 relative">
+                                <div class="absolute top-3 right-3 bg-violet-100 text-violet-700 text-xs font-bold px-2 py-1 rounded">C# 집중</div>
+                                <h4 class="font-bold text-slate-800 flex items-center mb-2"><span class="text-xl mr-2">🏃</span> 코어 프로그래머 (1명)</h4>
+                                <ul class="text-sm text-slate-600 space-y-1 list-disc pl-5">
+                                    <li>플랫포머 조작의 생명! <strong>이동, 점프, 벽타기 등 물리(Rigidbody2D) 엔진 코딩</strong></li>
+                                    <li>레이캐스트(Raycast)를 이용한 정교한 바닥/충돌 감지 로직</li>
+                                    <li>시네머신(Cinemachine) 카메라 세팅 및 게임오버/재시작 시스템</li>
+                                </ul>
+                            </div>
+                            <div class="glass-card p-5 border-l-4 border-l-emerald-500 relative">
+                                <div class="absolute top-3 right-3 bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-1 rounded">C# 집중</div>
+                                <h4 class="font-bold text-slate-800 flex items-center mb-2"><span class="text-xl mr-2">⚙️</span> 시스템 & 퍼즐 프로그래머 (1명)</h4>
+                                <ul class="text-sm text-slate-600 space-y-1 list-disc pl-5">
+                                    <li>동화책 퍼즐 기믹 <strong>(문 열림, 발판 스위치, 상자 밀기) 코드 구현</strong></li>
+                                    <li>인벤토리 및 수집 아이템 데이터 관리 매니저 작성</li>
+                                    <li>메모리 최적화를 위한 <strong>오브젝트 풀링(Object Pooling)</strong> 시스템 구축</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- 비전공자 역할 (에디터 & 리소스) -->
+                        <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center">🎨 비전공자 추천 (엔진 에디터 & 리소스)</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="glass-card p-5 border-l-4 border-l-orange-500 relative">
+                                <div class="absolute top-3 right-3 bg-orange-100 text-orange-700 text-xs font-bold px-2 py-1 rounded">리더십/소통</div>
+                                <h4 class="font-bold text-slate-800 flex items-center mb-2"><span class="text-xl mr-2">👑</span> 디렉터 겸 레벨 디자이너 (1명)</h4>
+                                <ul class="text-sm text-slate-600 space-y-1 list-disc pl-5">
+                                    <li>팀 노션 일정 관리 (PM) 및 기획 방향 유지</li>
+                                    <li>유니티 <strong>타일맵(Tilemap)으로 직접 스테이지 지형 그리기</strong></li>
+                                    <li>프로그래머가 만든 장애물을 맵에 재미있게 배치하고 난이도 조절</li>
+                                </ul>
+                            </div>
+                            <div class="glass-card p-5 border-l-4 border-l-sky-500 relative">
+                                <div class="absolute top-3 right-3 bg-sky-100 text-sky-700 text-xs font-bold px-2 py-1 rounded">시각/꼼꼼함</div>
+                                <h4 class="font-bold text-slate-800 flex items-center mb-2"><span class="text-xl mr-2">🖼️</span> 테크니컬 아티스트 & UI (1명)</h4>
+                                <ul class="text-sm text-slate-600 space-y-1 list-disc pl-5">
+                                    <li>무료 에셋 임포트, 스프라이트 자르기, 해상도 통일</li>
+                                    <li>캐릭터 <strong>애니메이터(Animator) 전환 제어 및 이펙트(Particle) 씌우기</strong></li>
+                                    <li>로비, 일시정지, 게임클리어 등 UI 캔버스 구성 및 버튼 연동</li>
+                                </ul>
+                            </div>
+                            <div class="glass-card p-5 border-l-4 border-l-pink-500 relative md:col-span-2">
+                                <div class="absolute top-3 right-3 bg-pink-100 text-pink-700 text-xs font-bold px-2 py-1 rounded">책임감/규칙</div>
+                                <h4 class="font-bold text-slate-800 flex items-center mb-2"><span class="text-xl mr-2">🛡️</span> Git 관리자 겸 사운드/QA (1명)</h4>
+                                <ul class="text-sm text-slate-600 space-y-1 list-disc pl-5">
+                                    <li>팀의 수호신! 팀원들이 올린 코드를 병합(Merge)하고 <strong>.meta 충돌 해결</strong></li>
+                                    <li>Audio Source와 Manager를 통한 배경음악/효과음 타이밍 연동</li>
+                                    <li>수시로 게임을 플레이하며 진행 불가 버그(Softlock) 찾아내기</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                `,
+                onRender: () => {
+                    const ctx = document.getElementById('rnrChart');
+                    if (window.rnrChartInstance) window.rnrChartInstance.destroy();
+
+                    const rawLabels = [
+                        '코어 프로그래머 (조작/물리 엔진)',
+                        '시스템 프로그래머 (퍼즐/기믹 로직)',
+                        '디렉터 겸 레벨 디자이너 (PM 및 맵 제작)',
+                        'TA 및 UI (애니메이션, 캔버스, 이펙트)',
+                        'Git 관리자 겸 사운드/QA (버전 관리)'
+                    ];
+
+                    const wrapLabels = (labels) => {
+                        return labels.map(label => {
+                            if (label.length > 16) {
+                                const words = label.split(' ');
+                                let lines = [];
+                                let currentLine = '';
+                                words.forEach(word => {
+                                    if ((currentLine + word).length > 16) {
+                                        if (currentLine.length > 0) lines.push(currentLine.trim());
+                                        currentLine = word + ' ';
+                                    } else {
+                                        currentLine += word + ' ';
+                                    }
+                                });
+                                if (currentLine.trim().length > 0) lines.push(currentLine.trim());
+                                return lines;
+                            }
+                            return label;
+                        });
+                    };
+
+                    const processedLabels = wrapLabels(rawLabels);
+                    const bgColors = ['#8b5cf6', '#10b981', '#f97316', '#0ea5e9', '#ec4899'];
+
+                    window.rnrChartInstance = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: processedLabels,
+                            datasets: [{
+                                data: [20, 20, 20, 20, 20],
+                                backgroundColor: bgColors,
+                                borderWidth: 0,
+                                hoverOffset: 10
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            cutout: '65%',
+                            plugins: {
+                                legend: { position: 'right', labels: { font: { family: 'Pretendard', size: 12 }, padding: 20 } },
+                                tooltip: {
+                                    callbacks: {
+                                        title: function(tooltipItems) {
+                                            const item = tooltipItems[0];
+                                            let label = item.chart.data.labels[item.dataIndex];
+                                            if (Array.isArray(label)) return label.join(' ');
+                                            return label;
+                                        },
+                                        label: function(context) {
+                                            return ' ' + context.parsed + '% (동등한 책임 부여)';
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            },
+            milestone: {
+                id: 'milestone', icon: '⏳', label: '생존 마일스톤',
+                title: '주차별 필수 마일스톤 타임라인',
+                desc: '가장 중요한 것은 버티컬 슬라이스(시작부터 끝까지 플레이 가능한 스테이지 1개)를 1주차 안에 뽑아내는 것입니다.',
+                render: () => `
+                    <div class="animate-content mt-4">
+                        <div class="relative border-l-4 border-slate-200 ml-4 md:ml-6 space-y-10 pb-10">
+                            
+                            <div class="relative">
+                                <div class="absolute -left-3 md:-left-3.5 bg-slate-300 w-5 h-5 rounded-full border-4 border-slate-50"></div>
+                                <div class="pl-6 md:pl-8">
+                                    <div class="inline-block px-3 py-1 rounded bg-slate-200 text-slate-700 text-xs font-bold mb-2">1주차 초반</div>
+                                    <h4 class="text-lg font-bold text-slate-800 mb-2">기획 픽스 및 프로토타입 (Whitebox)</h4>
+                                    <p class="text-sm text-slate-600 bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+                                        아트 리소스 없이 네모 박스(Whitebox)만으로 게임이 구동되어야 합니다.<br>
+                                        ✔ 플레이어 이동 및 점프 구현<br>
+                                        ✔ 스테이지 1의 뼈대 맵 완성 및 빈 상자로 기믹 테스트
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="relative">
+                                <div class="absolute -left-3 md:-left-3.5 bg-orange-500 w-5 h-5 rounded-full border-4 border-slate-50"></div>
+                                <div class="pl-6 md:pl-8">
+                                    <div class="inline-block px-3 py-1 rounded bg-orange-100 text-orange-700 text-xs font-bold mb-2">1주차 후반 (매우 중요)</div>
+                                    <h4 class="text-lg font-bold text-orange-600 mb-2">알파 빌드 (버티컬 슬라이스 완성)</h4>
+                                    <p class="text-sm text-slate-600 bg-white p-4 rounded-lg shadow-sm border border-orange-200 border-l-4 border-l-orange-500">
+                                        이 시점에 게임의 <strong>시작 -> 퍼즐 풀이 -> 책 내용 완성 -> 결말 화면</strong>까지 이어지는 완벽한 스테이지 1개가 나와야 합니다.<br>
+                                        이때 게임이 재미없거나 기술적으로 막히면 기획을 과감히 잘라내야 합니다.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="relative">
+                                <div class="absolute -left-3 md:-left-3.5 bg-sky-500 w-5 h-5 rounded-full border-4 border-slate-50"></div>
+                                <div class="pl-6 md:pl-8">
+                                    <div class="inline-block px-3 py-1 rounded bg-sky-100 text-sky-700 text-xs font-bold mb-2">2주차 초반</div>
+                                    <h4 class="text-lg font-bold text-sky-600 mb-2">베타 빌드 (콘텐츠 양산)</h4>
+                                    <p class="text-sm text-slate-600 bg-white p-4 rounded-lg shadow-sm border border-sky-200">
+                                        완성된 스테이지 1의 시스템을 복사하여 분량을 늘립니다.<br>
+                                        ✔ 스테이지 2, 3 제작 (기존 퍼즐 기믹 응용 배치)<br>
+                                        ✔ 메인 로비 메뉴, 일시정지, 환경설정 UI 적용
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="relative">
+                                <div class="absolute -left-3 md:-left-3.5 bg-violet-500 w-5 h-5 rounded-full border-4 border-slate-50"></div>
+                                <div class="pl-6 md:pl-8">
+                                    <div class="inline-block px-3 py-1 rounded bg-violet-100 text-violet-700 text-xs font-bold mb-2">2주차 후반 ~ 마감</div>
+                                    <h4 class="text-lg font-bold text-violet-600 mb-2">폴리싱 (Polishing) 및 최종 제출</h4>
+                                    <p class="text-sm text-slate-600 bg-white p-4 rounded-lg shadow-sm border border-violet-200 bg-violet-50">
+                                        <strong>새로운 기능 추가 절대 금지!</strong><br>
+                                        ✔ 배경 음악, 버튼 클릭음, 점프 소리 등 사운드 전면 적용<br>
+                                        ✔ 파티클 이펙트 추가 (완성도 퀄리티의 핵심)<br>
+                                        ✔ 버그 수정 및 최종 빌드 추출
+                                    </p>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                `
+            },
+            level: {
+                id: 'level', icon: '🧩', label: '퍼즐 & 레벨 디자인',
+                title: '퍼즐 아이디어 및 맵 에디터 가이드',
+                desc: '동화책 콘셉트를 반영한 쉬운 기믹과, 레벨 디자이너가 유니티에서 맵을 짤 때 지켜야 할 철칙입니다.',
+                render: () => `
+                    <div class="animate-content space-y-8">
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-800 mb-4 flex items-center"><span class="text-2xl mr-2">💡</span> 콘셉트 맞춤형 퍼즐 아이디어</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="glass-card p-5 rounded-xl border-t-4 border-t-sky-400">
+                                    <h4 class="font-bold text-sky-800 mb-2">아이디어 1: 단어 블록 밀기 (Word Push)</h4>
+                                    <p class="text-sm text-slate-600 mb-3">소코반(상자 밀기) 형식입니다. 부서진 문장 중간에 들어갈 'FIRE'나 'WATER' 글자 블록을 밀어서 구멍에 넣습니다.</p>
+                                    <div class="bg-sky-50 p-2 rounded text-xs text-slate-500 font-mono border border-sky-100">
+                                        구현: Rigidbody2D 동적 상자 + Trigger 이벤트 연동으로 문열림 처리
+                                    </div>
+                                </div>
+                                <div class="glass-card p-5 rounded-xl border-t-4 border-t-emerald-400">
+                                    <h4 class="font-bold text-emerald-800 mb-2">아이디어 2: 이야기 조립하기</h4>
+                                    <p class="text-sm text-slate-600 mb-3">맵 곳곳에 숨겨진 명사/동사 스티커(아이템)를 모아, 마지막 문(Door)에 위치한 캔버스 빈칸에 알맞게 드래그 앤 드롭합니다.</p>
+                                    <div class="bg-emerald-50 p-2 rounded text-xs text-slate-500 font-mono border border-emerald-100">
+                                        구현: UI Event Trigger (BeginDrag, OnDrop) 활용 (코드 직관적)
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2">에디터 작업자(레벨 디자이너) 철칙</h3>
+                            <div class="space-y-3">
+                                <div class="bg-white p-4 rounded shadow-sm border border-slate-200 flex items-start">
+                                    <div class="bg-slate-800 text-white font-bold px-2 py-1 rounded mr-4 text-sm mt-0.5">RULE 1</div>
+                                    <div>
+                                        <h5 class="font-bold text-slate-800">모든 장애물과 기믹은 Prefab으로 만들 것</h5>
+                                        <p class="text-sm text-slate-600 mt-1">하이어라키에 스프라이트 이미지를 그냥 끌어다 놓지 마세요. 나중에 가시 데미지를 수정할 때, Prefab을 쓰면 1개만 수정해도 맵 전체에 적용되지만, 그냥 배치하면 100개를 수동으로 고쳐야 합니다.</p>
+                                    </div>
+                                </div>
+                                <div class="bg-white p-4 rounded shadow-sm border border-slate-200 flex items-start">
+                                    <div class="bg-slate-800 text-white font-bold px-2 py-1 rounded mr-4 text-sm mt-0.5">RULE 2</div>
+                                    <div>
+                                        <h5 class="font-bold text-slate-800">Grid Snap (그리드 스냅) 생활화</h5>
+                                        <p class="text-sm text-slate-600 mt-1">퍼즐 플랫포머는 점프 '간격'이 생명입니다. 발판이 공중에 0.1픽셀 떠있거나 겹쳐있으면 충돌 버그가 생깁니다. Edit -> Grid Settings를 활용해 무조건 칸 단위로 스냅하여 배치하세요.</p>
+                                    </div>
+                                </div>
+                                <div class="bg-white p-4 rounded shadow-sm border border-slate-200 flex items-start">
+                                    <div class="bg-slate-800 text-white font-bold px-2 py-1 rounded mr-4 text-sm mt-0.5">RULE 3</div>
+                                    <div>
+                                        <h5 class="font-bold text-slate-800">빈 오브젝트로 폴더링하기</h5>
+                                        <p class="text-sm text-slate-600 mt-1">씬(Scene) 파일이 지저분해지면 프로그래머가 작업하기 힘듭니다. 빈 오브젝트를 생성해 이름을 <code>--- Puzzles ---</code>, <code>--- Grounds ---</code>로 짓고 그 하위로 깔끔하게 정리하세요.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `
+            },
+            tech: {
+                id: 'tech', icon: '💻', label: '유니티 핵심 기술',
+                title: '국비 초보를 위한 유니티 핵심 기술 체크',
+                desc: '2D 플랫포머 제작을 위해 당장 공부하고 프로젝트에 적용해야 하는 핵심 기능들입니다.',
+                render: () => `
+                    <div class="animate-content space-y-4">
+                        <div class="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                            <button class="w-full text-left px-6 py-4 font-bold text-slate-800 bg-slate-50 hover:bg-slate-100 flex justify-between items-center" onclick="toggleAcc('acc-1', 'icon-1')">
+                                <span>1. 타일맵 (Tilemap) 및 Rule Tile</span>
+                                <span id="icon-1" class="text-slate-400 font-normal">▼</span>
+                            </button>
+                            <div id="acc-1" class="hidden px-6 py-4 text-sm text-slate-600 border-t border-slate-100 bg-white">
+                                <p class="mb-2"><strong>왜 써야 하는가?</strong> 레벨 디자인 맵 제작 속도를 비약적으로 올립니다.</p>
+                                <p class="text-sky-700 bg-sky-50 p-3 rounded"><strong>멘토 꿀팁:</strong> 패키지 매니저에서 2D Tilemap Extras를 꼭 받으세요. <strong>Rule Tile</strong>을 세팅하면 중앙, 모서리 타일 이미지를 일일이 고를 필요 없이 브러쉬처럼 쭉 그으면 알아서 외곽선이 이쁘게 잡힙니다.</p>
+                            </div>
+                        </div>
+
+                        <div class="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                            <button class="w-full text-left px-6 py-4 font-bold text-slate-800 bg-slate-50 hover:bg-slate-100 flex justify-between items-center" onclick="toggleAcc('acc-2', 'icon-2')">
+                                <span>2. Rigidbody 2D & Composite Collider 2D</span>
+                                <span id="icon-2" class="text-slate-400 font-normal">▼</span>
+                            </button>
+                            <div id="acc-2" class="hidden px-6 py-4 text-sm text-slate-600 border-t border-slate-100 bg-white">
+                                <p class="mb-2"><strong>왜 써야 하는가?</strong> 타일 바닥 위를 캐릭터가 부드럽게 걷게 하기 위해 필수입니다.</p>
+                                <p class="text-sky-700 bg-sky-50 p-3 rounded"><strong>멘토 꿀팁:</strong> Tilemap Collider만 쓰면 타일과 타일 사이 미세한 틈에 캐릭터가 걸려 넘어지는 버그가 납니다. <strong>Composite Collider 2D</strong>를 추가하고 타일맵 콜라이더 설정에서 'Used By Composite'를 체크해 바닥 충돌선을 하나로 매끄럽게 합쳐주세요.</p>
+                            </div>
+                        </div>
+
+                        <div class="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                            <button class="w-full text-left px-6 py-4 font-bold text-slate-800 bg-slate-50 hover:bg-slate-100 flex justify-between items-center" onclick="toggleAcc('acc-3', 'icon-3')">
+                                <span>3. 레이캐스트 (Raycast 2D)</span>
+                                <span id="icon-3" class="text-slate-400 font-normal">▼</span>
+                            </button>
+                            <div id="acc-3" class="hidden px-6 py-4 text-sm text-slate-600 border-t border-slate-100 bg-white">
+                                <p class="mb-2"><strong>왜 써야 하는가?</strong> 무한 점프 버그를 막기 위한 가장 완벽한 방법입니다.</p>
+                                <p class="text-sky-700 bg-sky-50 p-3 rounded"><strong>멘토 꿀팁:</strong> 충돌 이벤트(OnCollisionEnter)로 바닥 감지를 하면 벽에 비비고 일 때도 점프가 됩니다. 플레이어 발끝에서 아래 방향으로 짧은 레이저(Physics2D.Raycast)를 쏘아 'Ground Layer'가 맞았을 때만 점프 가능(isGrounded = true)하게 코드를 짜세요.</p>
+                            </div>
+                        </div>
+
+                        <div class="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                            <button class="w-full text-left px-6 py-4 font-bold text-slate-800 bg-slate-50 hover:bg-slate-100 flex justify-between items-center" onclick="toggleAcc('acc-4', 'icon-4')">
+                                <span>4. 오브젝트 풀링 (Object Pooling)</span>
+                                <span id="icon-4" class="text-slate-400 font-normal">▼</span>
+                            </button>
+                            <div id="acc-4" class="hidden px-6 py-4 text-sm text-slate-600 border-t border-slate-100 bg-white">
+                                <p class="mb-2"><strong>왜 써야 하는가?</strong> 생성(Instantiate)과 파괴(Destroy)가 반복될 때 발생하는 메모리 낭비(가비지 컬렉션 렉)를 방지하는 핵심 최적화 기법입니다.</p>
+                                <p class="text-sky-700 bg-sky-50 p-3 rounded"><strong>멘토 꿀팁:</strong> 퍼즐 기믹(예: 반복되는 파티클 이펙트)에 적용해 보세요! 게임 시작 시 오브젝트를 미리 10개쯤 만들어 비활성화(<code>SetActive(false)</code>)해둔 뒤, <strong>Queue(큐)</strong> 자료구조를 써서 꺼내 쓰고 다시 집어넣는 원리입니다.</p>
+                            </div>
+                        </div>
+                    </div>
+                `
+            },
+            git: {
+                id: 'git', icon: '🚨', label: '협업 및 Git 규칙',
+                title: '국비학원 파괴자, Git 충돌 예방 4계명',
+                desc: '프로젝트가 엎어지는 원인 1순위는 기획 실패가 아니라 깃허브(Git) 충돌로 인한 파일 날림입니다. 무조건 숙지하세요.',
+                render: () => `
+                    <div class="animate-content">
+                        <div class="bg-rose-50 border border-rose-200 p-6 md:p-8 rounded-2xl shadow-sm">
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div class="bg-white p-5 rounded-xl shadow-sm border-l-4 border-l-rose-500 relative">
+                                    <div class="absolute -top-3 -left-3 bg-rose-500 text-white w-8 h-8 flex justify-center items-center rounded-full font-bold shadow-md">1</div>
+                                    <h4 class="font-bold text-slate-800 mb-2">동일 씬(Scene) 동시 작업 절대 금지</h4>
+                                    <p class="text-sm text-slate-600">A는 UI를, B는 맵을 같은 MainScene에서 작업하고 Push하면 씬이 박살납니다. 각자 본인 이름의 Scene에서 작업한 뒤, 완성물을 <strong>Prefab</strong>화 하여 MainScene에는 얹어두기만 하세요.</p>
+                                </div>
+
+                                <div class="bg-white p-5 rounded-xl shadow-sm border-l-4 border-l-rose-500 relative">
+                                    <div class="absolute -top-3 -left-3 bg-rose-500 text-white w-8 h-8 flex justify-center items-center rounded-full font-bold shadow-md">2</div>
+                                    <h4 class="font-bold text-slate-800 mb-2">.gitignore는 목숨처럼 적용</h4>
+                                    <p class="text-sm text-slate-600">유니티의 Library, Temp 폴더가 깃허브에 올라가는 순간 지옥이 열립니다. 프로젝트 생성 직후 반드시 최상단 폴더에 Unity 전용 .gitignore 파일을 추가하고 커밋하세요.</p>
+                                </div>
+
+                                <div class="bg-white p-5 rounded-xl shadow-sm border-l-4 border-l-rose-500 relative">
+                                    <div class="absolute -top-3 -left-3 bg-rose-500 text-white w-8 h-8 flex justify-center items-center rounded-full font-bold shadow-md">3</div>
+                                    <h4 class="font-bold text-slate-800 mb-2">출근 Pull, 퇴근 Commit & Push</h4>
+                                    <p class="text-sm text-slate-600">작업 전 습관적으로 최신 코드를 당겨오고(Pull), 하루 작업이 끝나면 무조건 올리세요. 내가 Push하기 전 남이 먼저 올렸다면 반드시 Pull을 받아 병합 후 Push해야 합니다.</p>
+                                </div>
+
+                                <div class="bg-white p-5 rounded-xl shadow-sm border-l-4 border-l-rose-500 relative">
+                                    <div class="absolute -top-3 -left-3 bg-rose-500 text-white w-8 h-8 flex justify-center items-center rounded-full font-bold shadow-md">4</div>
+                                    <h4 class="font-bold text-slate-800 mb-2">유니티 에디터 버전 완전 통일</h4>
+                                    <p class="text-sm text-slate-600">5명의 유니티 버전 소수점 하나라도 다르면 파일 메타데이터가 꼬입니다. <code>2022.3.10f1</code>처럼 LTS 버전을 정확히 일치시켜 설치하고 시작하세요.</p>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-8 text-center bg-rose-100 py-3 rounded text-rose-800 font-bold text-sm">
+                                💡 충돌(Conflict)이 났다면 억지로 덮어쓰지 말고 즉시 강사님이나 PM을 부르세요!
+                            </div>
+                        </div>
+                    </div>
+                `
+            }
+        };
+
+        function renderNav() {
+            const container = document.getElementById('nav-container');
+            let html = '';
+            for (const key in appData) {
+                const item = appData[key];
+                html += `
+                    <li>
+                        <button onclick="navigateTo('${key}')" id="nav-btn-${key}" class="nav-item w-full text-left px-4 md:px-6 py-3.5 text-slate-600 flex items-center justify-center md:justify-start">
+                            <span class="text-xl md:mr-3">${item.icon}</span>
+                            <span class="hidden md:inline font-medium text-sm">${item.label}</span>
+                        </button>
+                    </li>
+                `;
+            }
+            container.innerHTML = html;
+        }
+
+        function navigateTo(key) {
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('nav-active'));
+            document.getElementById(`nav-btn-${key}`).classList.add('nav-active');
+
+            const content = appData[key];
+            const mainContent = document.getElementById('main-content');
+            
+            mainContent.innerHTML = `
+                <div class="max-w-4xl mx-auto p-6 md:p-10 pb-20">
+                    <header class="mb-10">
+                        <h2 class="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">${content.title}</h2>
+                        <p class="text-slate-500 mt-3 md:text-lg">${content.desc}</p>
+                    </header>
+                    <section>
+                        ${content.render()}
+                    </section>
+                </div>
+            `;
+
+            if (content.onRender) setTimeout(content.onRender, 50);
+        }
+
+        function toggleAcc(contentId, iconId) {
+            const el = document.getElementById(contentId);
+            const icon = document.getElementById(iconId);
+            if (el.classList.contains('hidden')) {
+                el.classList.remove('hidden');
+                icon.textContent = '▲';
+            } else {
+                el.classList.add('hidden');
+                icon.textContent = '▼';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderNav();
+            navigateTo('intro');
+        });
+    </script>
+</body>
+</html>
